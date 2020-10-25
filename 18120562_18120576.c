@@ -150,8 +150,61 @@ void handleType3Command(char** cmd, int count)
 	
 }
 
+// Them lenh vao history
+void addCmdToHistory(char*** cmdHistory, int* count, char* newCmd)
+{		
+	if(*count == 0)
+		*cmdHistory = (char**) malloc(sizeof(char*) * 1);	
+	else
+		*cmdHistory = (char**) realloc(*cmdHistory, sizeof(char*) * (*count + 1));
+
+	*count = *count + 1;
+
+	(*cmdHistory)[*count - 1] = malloc(sizeof(char) * strlen(newCmd));
+
+	strcpy((*cmdHistory)[*count - 1], newCmd);
+}
+
+// Hien thi cac lenh da dung
+void showHistory(char** cmdHistory, int count)
+{
+	int i;
+	for(i = 0; i < count; i++)
+	{
+		printf("%5d  ", i + 1);
+		fputs(cmdHistory[i], stdout);
+	}
+}
+
+// Lay ra lenh da dung gan nhat
+char* getTheLastCmd(char** cmdHistory, int count)
+{
+	if(count == 0)
+		return NULL;
+
+	return cmdHistory[count - 1];
+}
+
+// Kiem tra lenh co phai la !! khong
+int isCmdExecuteLastCmd(char* cmd)
+{
+	int i;
+	int len;
+	len = strlen(cmd);
+	for(i = 0; i < len - 1; i++)
+	{
+		if(cmd[i] == '!' && cmd[i + 1] == '!')
+			return 1;
+	} 
+
+	return 0;
+}
+
 void main()
 {
+	char** commandHistory = NULL;
+	int countHistory = 0;
+
 	while(1)
 	{
 		char* command;
@@ -159,8 +212,37 @@ void main()
 		int count;
 		printf("> ");
 		getline(&command, &size, stdin);
+		
+		// Neu lenh khong phai !!, them vao history
+		if(isCmdExecuteLastCmd(command) == 0)
+			addCmdToHistory(&commandHistory, &countHistory, command);		
+
 		char **cmd;
 		cmd = splitCommand(command, &count);
+		
+		// Neu lenh la !!
+		if(strcmp(cmd[0], "!!") == 0 && count == 1)
+		{
+			char* lastCmd = getTheLastCmd(commandHistory, countHistory);
+			
+			// Neu history rong
+			if(lastCmd == NULL)
+			{
+				printf("No command in history\n");
+				continue;
+			}
+			
+			command = malloc(sizeof(char) * strlen(lastCmd));
+			strcpy(command, lastCmd);			
+			addCmdToHistory(&commandHistory, &countHistory, command);
+			cmd = splitCommand(command, &count);
+		}	
+
+		if(strcmp(cmd[0], "history") == 0 && count == 1)
+		{
+			showHistory(commandHistory, countHistory);
+			continue;
+		}	
 		
 		if(strcmp(cmd[0], "cd") == 0 && count == 2)
 		{	
