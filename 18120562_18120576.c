@@ -7,6 +7,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#define STDIN 0
+#define STDOUT 1
+#define READ_END 0
+#define WRITE_END 1
+
 //Xoa khoang trang dau chuoi
 void delSpace(char* str)
 {
@@ -260,35 +265,54 @@ void splitCommandUsePipe(char** cmd, int count, char*** firstCmd, char*** second
 // Xu ly lenh dung pipe
 void handleType4Command(char** cmd, int count)
 {
-	int pid;
+	int pid, cpid;
 	int fd[2];
 	int childStatus;
 	char** firstCmd;
 	char** secondCmd;
 	splitCommandUsePipe(cmd, count, &firstCmd, &secondCmd);	
 
-	pid = fork(); 
-	
-	if (pid == 0) {
-    int cpid;
-    pipe(fd);
-    cpid = fork();
+	pid = fork();
+	switch(pid)
+	{
+		case -1:
+			printf( "Loi: Khong the tao tien trinh." );
+			break;
+		
+		case 0:
+			pipe(fd);
+    	cpid = fork();
+			switch(cpid)
+			{
+				case -1:
+					printf( "Loi: Khong the tao tien trinh." );
+					break;
+			
+				case 0:
+					dup2(fd[READ_END], STDIN);
+		    	close(fd[READ_END]);
+		    	close (fd[WRITE_END]);
+				
+		    	execvp(secondCmd[0], secondCmd);
+					exit(1);
+					break;
+			
+				default:
+					dup2(fd[WRITE_END], STDOUT);
+		    	close(fd[READ_END]);
+		    	close(fd[WRITE_END]);			
+		 
+					execvp(firstCmd[0], firstCmd);
+					wait(NULL);
+					exit(1);
+					break;
+			}
+			break;
 
-    if(cpid == 0) {
-      dup2(fd[0], 0);
-      close(fd[0]);
-      close (fd[1]);
-
-      execvp(secondCmd[0], secondCmd);
-    } else if(cpid > 0) {
-      dup2(fd[1],1);
-      close(fd[0]);
-      close(fd[1]);			
-
-      execvp(firstCmd[0], firstCmd);
-    }
-  } else if (pid > 0) {
-      wait(NULL);
+		default:
+			wait(NULL);
+			usleep(500);
+			break;		
 	}
 }
 
@@ -301,7 +325,6 @@ void main()
 	{
 		char* command;
 		size_t size = 0;
-		int count;
 		printf("> ");
 		getline(&command, &size, stdin);
 		
@@ -319,6 +342,7 @@ void main()
 		}
 
 		char **cmd;
+		int count;
 		cmd = splitCommand(command, &count);
 		
 		// Neu lenh la !!
@@ -359,11 +383,9 @@ void main()
 			handleType1Command(cmd, count);
 		else if (getTypeOfCommand(cmd, count) == 3)
 				handleType3Command(cmd, count);
-		else
-		{
-			if(getTypeOfCommand(cmd, count) == 4)
+		else if (getTypeOfCommand(cmd, count) == 4)
 				handleType4Command(cmd, count);
-		}
+
 		free(command);
 		free(cmd);
 	}
