@@ -265,7 +265,9 @@ void splitCommandUsePipe(char** cmd, int count, char*** firstCmd, char*** second
 // Xu ly lenh dung pipe
 void handleType4Command(char** cmd, int count)
 {
-	int pid, cpid;
+	pid_t pid, cpid;
+	int status;
+	int corpse;
 	int fd[2];
 	int childStatus;
 	char** firstCmd;
@@ -288,30 +290,30 @@ void handleType4Command(char** cmd, int count)
 					printf( "Loi: Khong the tao tien trinh." );
 					break;
 			
-				case 0:
+				case 0:					
 					dup2(fd[READ_END], STDIN);
 		    	close(fd[READ_END]);
-		    	close (fd[WRITE_END]);
-				
+					close (fd[WRITE_END]);
+
 		    	execvp(secondCmd[0], secondCmd);
-					exit(1);
+					_exit(EXIT_SUCCESS);
 					break;
 			
-				default:
-					dup2(fd[WRITE_END], STDOUT);
-		    	close(fd[READ_END]);
+				default:					
+					dup2(fd[WRITE_END], STDOUT);	
+					close(fd[READ_END]);	    	
 		    	close(fd[WRITE_END]);			
-		 
+					
 					execvp(firstCmd[0], firstCmd);
-					wait(NULL);
-					exit(1);
+					_exit(EXIT_SUCCESS);
 					break;
 			}
 			break;
 
 		default:
 			wait(NULL);
-			usleep(500);
+			wait(NULL);
+			usleep(50000);
 			break;		
 	}
 }
