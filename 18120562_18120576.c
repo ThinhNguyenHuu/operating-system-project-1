@@ -12,23 +12,51 @@
 #define READ_END 0
 #define WRITE_END 1
 
-//Xoa khoang trang dau chuoi
+//Xoa khoang trang dau chuoi, cuoi chuoi, khoang trang thua giua chuoi
 void delSpace(char* str)
 {
 	while(str[0] == ' ')
 	{
 		int i;
-		for(i = 0; i < strlen(str); i++)
+		for(i = 0; i < strlen(str) - 1; i++)
 			str[i] = str[i+1];
+		str[i] = '\0';
 	}
+
+	while(str[strlen(str) - 1] == ' ' || str[strlen(str) -1] == '\n')
+	{
+		str[strlen(str) - 1] = '\0';
+	}
+	
+	int i;
+	for(i = 0; i < strlen(str); i++)
+	{
+		if(str[i] == '\"')
+		{
+			i++;
+			while(str[i] != '\"' && str[i] != '\0') 
+				i++;
+			continue;
+		}
+		
+		if(str[i] == ' ' && (str[i + 1] == ' ' || str[i+1] == '\0'))
+		{
+			int j;
+			for(j = i; j < strlen(str) - 1; j++)
+				str[j] = str[j + 1];
+			str[j] = '\0';
+			i--;
+		}
+	}
+
 }
 
 //Chia lenh nhap vao thanh tung phan
 char** splitCommand(char* cmd, int* count)
 {
 	char** result;
-	
-	char* temp;	//Chuoi tam de luu cac phan cua lenh
+
+	char temp[100];	//Chuoi tam de luu cac phan cua lenh
 	(*count) = 0; //Bien dem so luong phan cua lenh
 	int indexResult = 0;
 
@@ -36,27 +64,68 @@ char** splitCommand(char* cmd, int* count)
 	int i;
 	for (i = 0 ; i < strlen(cmd); i++)
 	{
+		if(cmd[i] == '\"')
+		{
+			i++;
+			while(cmd[i] != '\"' && cmd[i] != '\0') 
+				i++;
+			continue;
+		}
+
 		if(cmd[i] == ' ' && cmd[i+1] != ' ' && cmd[i+1] != '\0')
+
 			(*count)++;
 	}
 	(*count)++;
-	
+
 	result = (char**)malloc(((*count) + 1) * sizeof(char*));
 
 	/* Tach lenh */
-	temp = strtok(cmd, " \n");
-
-	while(temp != NULL)
+	int indexTemp = 0;
+	for(i = 0; i < strlen(cmd); i++)
 	{
-		delSpace(temp);
-		result[indexResult] = temp;
-		indexResult++;
-		temp = strtok(NULL, " \n");
+		if(cmd[i] == '\"')
+		{
+			i++;
+			while(cmd[i] != '\"' && cmd[i] != '\0') 
+			{
+				temp[indexTemp] = cmd[i];
+				indexTemp++;
+				i++;
+			}
+			continue;
+		}
+
+		if(cmd[i] != ' ')
+		{
+			temp[indexTemp] = cmd[i];
+			indexTemp++;
+		}
+		else
+		{
+			temp[indexTemp] = '\0';
+			result[indexResult] = (char*)malloc((strlen(temp) + 1));
+			int j;
+			for(j = 0; j < strlen(temp); j++)
+				result[indexResult][j] = temp[j];
+			result[indexResult][j] = '\0';
+
+			indexResult++;
+			indexTemp = 0;
+		}
 	}
+	temp[indexTemp] = '\0';
+	result[indexResult] = (char*)malloc((strlen(temp) + 1));
+	int j;
+	for(j = 0; j < strlen(temp); j++)
+		result[indexResult][j] = temp[j];
+	result[indexResult][j] = '\0';
+
+	indexResult++;
+	
 	result[indexResult] = NULL;
 	return result;
 }
-
 
 //Return 3: lenh > hoac <
 //Return 1: lenh thuong
@@ -75,14 +144,11 @@ int getTypeOfCommand (char** cmd, int count)
 	return 1;
 }
 
-
 //Xu ly lenh thuong.
 void handleType1Command(char** cmd, int count)
 {
-	
 	pid_t new_pid;
 	int child_status;
-	
 	new_pid = fork(); 
 	switch (new_pid)
 	{
@@ -103,11 +169,11 @@ void handleType3Command(char** cmd, int count)
 {
 	pid_t new_pid;
 	int child_status;
-	
+
 	char* filePath;
 	int type = -1; // 0: < va 1: >
 	int i;
-	char* temp;
+
 	for (i = 0; i < count; i++)
 	{
 		if(type == -1)
@@ -116,7 +182,6 @@ void handleType3Command(char** cmd, int count)
 			{
 				type = 0;
 				filePath = cmd[i+1];
-
 			}
 
 			if(strcmp(cmd[i], ">") == 0)
@@ -125,9 +190,13 @@ void handleType3Command(char** cmd, int count)
 				filePath = cmd[i+1];
 			}
 		}
+
 		else
-			cmd[i - 1] = NULL;
+		{
+			cmd[i-1] = NULL;
+		}
 	}
+
 	cmd[i - 1] = NULL;
 
 	new_pid = fork(); 
@@ -143,20 +212,21 @@ void handleType3Command(char** cmd, int count)
 			{
 				fileDes = open(filePath, O_RDONLY, S_IRUSR | S_IRGRP | S_IROTH);
 			}
+
 			else 
 				fileDes = open(filePath, O_WRONLY | O_TRUNC | O_CREAT,  S_IWUSR | S_IWGRP |S_IWOTH | S_IRUSR | S_IRGRP | S_IROTH);
-			
+
 			dup2(fileDes, type);
 			close(fileDes);
-			
+
 			execvp(cmd[0], cmd);
 		}			
+
 		 	break;
 		default: 
 			wait( &child_status ); //Tien trinh cha doi tien trinh con ket thuc.
 			break;
 	}
-	
 }
 
 // Them lenh vao history
@@ -169,10 +239,15 @@ void addCmdToHistory(char*** cmdHistory, int* count, char* newCmd)
 
 	*count = *count + 1;
 
-	(*cmdHistory)[*count - 1] = malloc(sizeof(char) * strlen(newCmd));
+	(*cmdHistory)[*count - 1] = malloc(sizeof(char) * (strlen(newCmd) + 1));
 
-	strcpy((*cmdHistory)[*count - 1], newCmd);
+	int i;
+	for(i = 0; i < strlen(newCmd); i++)
+		(*cmdHistory)[*count - 1][i] = newCmd[i];
+	(*cmdHistory)[*count - 1][i] = '\0';
 }
+
+
 
 // Hien thi cac lenh da dung
 void showHistory(char** cmdHistory, int count)
@@ -181,7 +256,9 @@ void showHistory(char** cmdHistory, int count)
 	for(i = 0; i < count; i++)
 	{
 		printf("%5d  ", i + 1);
+
 		fputs(cmdHistory[i], stdout);
+		printf("\n");
 	}
 }
 
@@ -205,7 +282,6 @@ int isCmdExecuteLastCmd(char* cmd)
 		if(cmd[i] == '!' && cmd[i + 1] == '!')
 			return 1;
 	} 
-
 	return 0;
 }
 
@@ -225,7 +301,6 @@ int isStringEqual(char* str1, char* str2)
 	int len1, len2;
 	len1 = strlen(str1);
 	len2 = strlen(str2);
-
 	if(len1 != len2)
 		return 0;
 
@@ -237,13 +312,14 @@ int isStringEqual(char* str1, char* str2)
 	return 1;
 }
 
+
+
 void splitCommandUsePipe(char** cmd, int count, char*** firstCmd, char*** secondCmd)
 {
 	int i, temp = -1;
 	for(i = 0; i < count; i++)
 		if(strcmp(cmd[i], "|") == 0)
 			temp = i;
-
 	if(temp < 0)
 		return;
 
@@ -262,7 +338,10 @@ void splitCommandUsePipe(char** cmd, int count, char*** firstCmd, char*** second
 	} 
 }
 
+
+
 // Xu ly lenh dung pipe
+
 void handleType4Command(char** cmd, int count)
 {
 	pid_t pid, cpid;
@@ -283,7 +362,7 @@ void handleType4Command(char** cmd, int count)
 		
 		case 0:
 			pipe(fd);
-    	cpid = fork();
+    			cpid = fork();
 			switch(cpid)
 			{
 				case -1:
@@ -292,17 +371,17 @@ void handleType4Command(char** cmd, int count)
 			
 				case 0:					
 					dup2(fd[READ_END], STDIN);
-		    	close(fd[READ_END]);
+		    		close(fd[READ_END]);
 					close (fd[WRITE_END]);
 
-		    	execvp(secondCmd[0], secondCmd);
+		    		execvp(secondCmd[0], secondCmd);
 					_exit(EXIT_SUCCESS);
 					break;
 			
 				default:					
 					dup2(fd[WRITE_END], STDOUT);	
 					close(fd[READ_END]);	    	
-		    	close(fd[WRITE_END]);			
+		    		close(fd[WRITE_END]);			
 					
 					execvp(firstCmd[0], firstCmd);
 					_exit(EXIT_SUCCESS);
@@ -328,17 +407,18 @@ void main()
 		char* command;
 		size_t size = 0;
 		printf("> ");
+		fflush(stdin);
 		getline(&command, &size, stdin);
-		
+
+		delSpace(command);
 		// Neu lenh rong
 		if(strcmp(command, "\n") == 0)
 			continue;
-		
+
 		// Neu lenh khong phai !!, them vao history
 		if(isCmdExecuteLastCmd(command) == 0)
 		{
 			char* lastCmd = getTheLastCmd(commandHistory, countHistory);
-
 			if(isStringEqual(command, lastCmd) == 0)
 				addCmdToHistory(&commandHistory, &countHistory, command);		
 		}
@@ -346,24 +426,28 @@ void main()
 		char **cmd;
 		int count;
 		cmd = splitCommand(command, &count);
-		
+
 		// Neu lenh la !!
 		if(strcmp(cmd[0], "!!") == 0 && count == 1)
 		{
 			char* lastCmd = getTheLastCmd(commandHistory, countHistory);
-			
 			// Neu history rong
 			if(lastCmd == NULL)
 			{
 				printf("No command in history.\n");
 				continue;
 			}
-			
-			command = malloc(sizeof(char) * strlen(lastCmd));
-			strcpy(command, lastCmd);	
-			fputs(command, stdout);
-	
+
+			command = malloc(sizeof(char) * (strlen(lastCmd) + 1));
+			int i;
+			for(i = 0; i < strlen(lastCmd); i++)
+				command[i] = lastCmd[i];
+			command[i] = '\0';	
+
+			puts(command);
+			printf("\n");
 			cmd = splitCommand(command, &count);
+
 		}	
 
 		if(strcmp(cmd[0], "history") == 0 && count == 1)
@@ -371,16 +455,17 @@ void main()
 			showHistory(commandHistory, countHistory);
 			continue;
 		}	
-		
+
 		if(strcmp(cmd[0], "cd") == 0 && count == 2)
 		{	
 			chdir(cmd[1]);
 			continue;
 		}
-		
-		if(strcmp(cmd[0], "exit") == 0 && count == 1)
-			return;
 
+		if(strcmp(cmd[0], "exit") == 0 && count == 1)
+			break;
+
+		
 		if(getTypeOfCommand(cmd, count) == 1)
 			handleType1Command(cmd, count);
 		else if (getTypeOfCommand(cmd, count) == 3)
@@ -388,10 +473,26 @@ void main()
 		else if (getTypeOfCommand(cmd, count) == 4)
 				handleType4Command(cmd, count);
 
-		free(command);
-		free(cmd);
-	}
-}
+		if(command != NULL)
+			free(command);
+		int i;
+		for(i = 0; i <= count; i++)
+		{
+			if(cmd[i] != NULL)
+				free(cmd[i]);
+		}
 
-	
-	
+		if(cmd != NULL)
+			free(cmd);
+
+	}
+	int i;
+	for(i = 0; i < countHistory; i++)
+	{
+		if(commandHistory[i] != NULL)
+			free(commandHistory[i]);
+	}
+	if(commandHistory != NULL)
+		free(commandHistory);
+
+}
