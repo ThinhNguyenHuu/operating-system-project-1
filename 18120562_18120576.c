@@ -15,6 +15,7 @@
 //Xoa khoang trang dau chuoi, cuoi chuoi, khoang trang thua giua chuoi
 void delSpace(char* str)
 {
+	/* Xoa khoang trang dau chuoi */
 	while(str[0] == ' ')
 	{
 		int i;
@@ -23,14 +24,17 @@ void delSpace(char* str)
 		str[i] = '\0';
 	}
 
+	/* Xoa khoang trang cuoi chuoi */
 	while(str[strlen(str) - 1] == ' ' || str[strlen(str) -1] == '\n')
 	{
 		str[strlen(str) - 1] = '\0';
 	}
-	
+
+	/* Xoa khoang trang giua chuoi */
 	int i;
 	for(i = 0; i < strlen(str); i++)
 	{
+		/* Khong xoa khoang trang trong cap dau " " */
 		if(str[i] == '\"')
 		{
 			i++;
@@ -38,7 +42,7 @@ void delSpace(char* str)
 				i++;
 			continue;
 		}
-		
+
 		if(str[i] == ' ' && (str[i + 1] == ' ' || str[i+1] == '\0'))
 		{
 			int j;
@@ -57,7 +61,7 @@ char** splitCommand(char* cmd, int* count)
 	char** result;
 
 	char temp[100];	//Chuoi tam de luu cac phan cua lenh
-	(*count) = 0; //Bien dem so luong phan cua lenh
+	(*count) = 0;   //Bien dem so luong phan cua lenh
 	int indexResult = 0;
 
 	/* Dem so luong phan cua lenh */
@@ -122,11 +126,12 @@ char** splitCommand(char* cmd, int* count)
 	result[indexResult][j] = '\0';
 
 	indexResult++;
-	
+
 	result[indexResult] = NULL;
 	return result;
 }
 
+//Ham phan loai lenh
 //Return 3: lenh > hoac <
 //Return 1: lenh thuong
 //Return 4: lenh dung pipe
@@ -153,10 +158,11 @@ void handleType1Command(char** cmd, int count)
 	switch (new_pid)
 	{
 		case -1: 
-			printf( "Loi: Khong the tao tien trinh." );
+			printf( "Error: Cannot create process.\n" );
 			break;
 		case 0: 
-			execvp(cmd[0], cmd);			
+			execvp(cmd[0], cmd);
+			exit(EXIT_SUCCESS);			
 		 	break;
 		default: 
 			wait( &child_status ); //Tien trinh cha doi tien trinh con ket thuc.
@@ -170,56 +176,95 @@ void handleType3Command(char** cmd, int count)
 	pid_t new_pid;
 	int child_status;
 
-	char* filePath;
-	int type = -1; // 0: < va 1: >
-	int i;
+	char* filePathInput = NULL;
+	char* filePathOutput = NULL;
 
+	int flag = 0;
+	int count2 = 0;
+
+	int i;
 	for (i = 0; i < count; i++)
 	{
-		if(type == -1)
+		if(strcmp(cmd[i], "<") == 0)
 		{
-			if(strcmp(cmd[i], "<") == 0)
-			{
-				type = 0;
-				filePath = cmd[i+1];
-			}
-
-			if(strcmp(cmd[i], ">") == 0)
-			{
-				type = 1;
-				filePath = cmd[i+1];
-			}
+			filePathInput = cmd[i+1];
+			flag = 1;
 		}
 
-		else
+		if(strcmp(cmd[i], ">") == 0)
 		{
-			cmd[i-1] = NULL;
+			filePathOutput = cmd[i+1];
+			flag = 1;
 		}
+
+		if(flag == 0)
+			count2++;
 	}
 
-	cmd[i - 1] = NULL;
+
+	char** newCmd;
+	newCmd = (char**)malloc((count2 + 1) * sizeof(char*));
+	
+	for(i = 0; i < count2; i++)
+	{
+		newCmd[i] = (char*)malloc(strlen(cmd[i]) + 1);
+		int j;
+		for(j = 0; j < strlen(cmd[i]); j++)
+			newCmd[i][j] = cmd[i][j];
+		newCmd[i][j] = '\0';
+	}
+	newCmd[i] = NULL;
 
 	new_pid = fork(); 
 	switch (new_pid)
 	{
 		case -1: 
-			printf( "Loi: Khong the tao tien trinh." );
+			printf( "Error: Cannot create process.\n" );
 			break;
 		case 0: 
 		{
-			int fileDes;
-			if(type == 0)
+			int fileDesInput = 0;
+			int fileDesOutput = 1;
+			if(filePathInput != NULL || filePathOutput != NULL)
 			{
-				fileDes = open(filePath, O_RDONLY, S_IRUSR | S_IRGRP | S_IROTH);
+				if(filePathInput != NULL)
+				{
+					fileDesInput = open(filePathInput, O_RDONLY, S_IRUSR | S_IRGRP | S_IROTH);
+					if(fileDesInput < 0)
+					{
+						printf("Error: Cannot open file.\n");
+						exit(EXIT_FAILURE);
+					}
+					else
+					{
+						dup2(fileDesInput, STDIN);
+						close(fileDesInput);
+					}
+				}
+			
+
+				if(filePathOutput != NULL)
+				{
+					fileDesOutput = open(filePathOutput, O_WRONLY | O_TRUNC | O_CREAT,  S_IWUSR | S_IWGRP |S_IWOTH | S_IRUSR | S_IRGRP | S_IROTH);
+					if(fileDesOutput < 0)
+					{
+						printf("Error: Cannot open file.\n");
+						exit(EXIT_FAILURE);
+					}
+					else
+					{
+						dup2(fileDesOutput, STDOUT);
+						close(fileDesInput);
+					}
+				}
+				execvp(newCmd[0], newCmd);
+				exit(EXIT_SUCCESS);
 			}
-
-			else 
-				fileDes = open(filePath, O_WRONLY | O_TRUNC | O_CREAT,  S_IWUSR | S_IWGRP |S_IWOTH | S_IRUSR | S_IRGRP | S_IROTH);
-
-			dup2(fileDes, type);
-			close(fileDes);
-
-			execvp(cmd[0], cmd);
+			else
+			{
+				printf("Error: Don't have filename in command.\n");
+				exit(EXIT_FAILURE);
+			}
 		}			
 
 		 	break;
@@ -227,6 +272,11 @@ void handleType3Command(char** cmd, int count)
 			wait( &child_status ); //Tien trinh cha doi tien trinh con ket thuc.
 			break;
 	}
+	for(i = 0; i < count2; i++)
+		if(newCmd[i] != NULL)
+			free(newCmd[i]);
+	if(newCmd != NULL)
+		free(newCmd);
 }
 
 // Them lenh vao history
@@ -341,7 +391,6 @@ void splitCommandUsePipe(char** cmd, int count, char*** firstCmd, char*** second
 
 
 // Xu ly lenh dung pipe
-
 void handleType4Command(char** cmd, int count)
 {
 	pid_t pid, cpid;
@@ -357,18 +406,18 @@ void handleType4Command(char** cmd, int count)
 	switch(pid)
 	{
 		case -1:
-			printf( "Loi: Khong the tao tien trinh." );
+			printf( "Error: Cannot create process.\n" );
 			break;
-		
+
 		case 0:
 			pipe(fd);
-    			cpid = fork();
+    		cpid = fork();
 			switch(cpid)
 			{
 				case -1:
-					printf( "Loi: Khong the tao tien trinh." );
+					printf( "Error: Cannot create process.\n" );
 					break;
-			
+
 				case 0:					
 					dup2(fd[READ_END], STDIN);
 		    		close(fd[READ_END]);
@@ -377,12 +426,12 @@ void handleType4Command(char** cmd, int count)
 		    		execvp(secondCmd[0], secondCmd);
 					_exit(EXIT_SUCCESS);
 					break;
-			
+
 				default:					
 					dup2(fd[WRITE_END], STDOUT);	
 					close(fd[READ_END]);	    	
 		    		close(fd[WRITE_END]);			
-					
+
 					execvp(firstCmd[0], firstCmd);
 					_exit(EXIT_SUCCESS);
 					break;
@@ -401,6 +450,16 @@ void main()
 {
 	char** commandHistory = NULL;
 	int countHistory = 0;
+	char* prePath = NULL;
+	char* tempPath = NULL;
+	char* pwd = getenv("PWD");	
+	char* tempPath2 = NULL;
+
+	tempPath = (char*)malloc(strlen(pwd) + 1);
+	int i;
+	for(i = 0; i < strlen(pwd); i++)
+		tempPath[i] = pwd[i];
+	tempPath[i] = '\0';
 
 	while(1)
 	{
@@ -411,6 +470,7 @@ void main()
 		getline(&command, &size, stdin);
 
 		delSpace(command);
+
 		// Neu lenh rong
 		if(strcmp(command, "\n") == 0)
 			continue;
@@ -445,7 +505,6 @@ void main()
 			command[i] = '\0';	
 
 			puts(command);
-			printf("\n");
 			cmd = splitCommand(command, &count);
 
 		}	
@@ -456,16 +515,98 @@ void main()
 			continue;
 		}	
 
-		if(strcmp(cmd[0], "cd") == 0 && count == 2)
-		{	
-			chdir(cmd[1]);
+
+		if(strcmp(cmd[0], "cd") == 0)
+		{
+			tempPath2 = (char*)malloc(strlen(tempPath) + 1);
+
+			int i;
+			for(i = 0; i < strlen(tempPath); i++)
+				tempPath2[i] = tempPath[i];
+			tempPath2[i] = '\0';
+
+
+			if(cmd[1] == NULL || strcmp(cmd[1], "~") == 0)
+			{
+				char* home =  getenv("HOME");
+				tempPath2 = (char*)malloc(strlen(home) + 1);
+
+				for(i = 0; i < strlen(home); i++)
+					tempPath2[i] = home[i];
+				tempPath2[i] = '\0';
+
+				chdir(home);
+			}
+			else if(strcmp(cmd[1], "..") == 0)
+			{
+				while(tempPath2[strlen(tempPath2) - 1] != '/' )
+					tempPath2[strlen(tempPath2) - 1] = '\0';
+				
+				chdir(tempPath2);
+			}
+			else if(strcmp(cmd[1], "-") == 0)
+			{
+				if(prePath == NULL)
+					printf("Don't have previous path.\n");
+				else
+				{
+					tempPath2 = (char*)malloc(strlen(prePath) + 1);
+
+					for(i = 0; i < strlen(prePath); i++)
+						tempPath2[i] = prePath[i];
+					tempPath2[i] = '\0';
+
+					chdir(prePath);
+				}
+			}
+			else
+			{
+				tempPath2 = (char*)malloc(strlen(cmd[1]) + 1);
+
+
+				for(i = 0; i < strlen(cmd[1]); i++)
+					tempPath2[i] = cmd[1][i];
+				tempPath2[i] = '\0';
+
+				chdir(cmd[1]);
+			}
+			
+			prePath = (char*)malloc(strlen(tempPath) + 1);
+
+			for(i = 0; i < strlen(tempPath); i++)
+				prePath[i] = tempPath[i];
+			prePath[i] = '\0';
+
+			tempPath = (char*)malloc(strlen(tempPath2) + 1);
+
+			for(i = 0; i < strlen(tempPath2); i++)
+				tempPath[i] = tempPath2[i];
+			tempPath[i] = '\0';
+			
 			continue;
 		}
 
-		if(strcmp(cmd[0], "exit") == 0 && count == 1)
-			break;
+		if(strcmp(cmd[0], "exit") == 0)
+		{
+			int i;
+			for(i = 0; i < countHistory; i++)
+			{
+				if(commandHistory[i] != NULL)
+					free(commandHistory[i]);
+			}
+			if(commandHistory != NULL)
+				free(commandHistory);
+			if(prePath != NULL)
+				free(prePath);
+			if(tempPath != NULL)
+				free(tempPath);
+			if(tempPath2 != NULL)
+				free(tempPath2);
 
-		
+			exit(EXIT_SUCCESS);
+		}
+
+
 		if(getTypeOfCommand(cmd, count) == 1)
 			handleType1Command(cmd, count);
 		else if (getTypeOfCommand(cmd, count) == 3)
@@ -486,13 +627,5 @@ void main()
 			free(cmd);
 
 	}
-	int i;
-	for(i = 0; i < countHistory; i++)
-	{
-		if(commandHistory[i] != NULL)
-			free(commandHistory[i]);
-	}
-	if(commandHistory != NULL)
-		free(commandHistory);
 
 }
