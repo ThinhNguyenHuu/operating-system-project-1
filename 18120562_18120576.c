@@ -143,7 +143,7 @@ int getTypeOfCommand (char** cmd, int count)
 		if(strcmp(cmd[i], "|") == 0)
 			return 4;
 
-		if(strcmp(cmd[i], "<") == 0 || strcmp(cmd[i], ">") == 0)
+		if(strcmp(cmd[i], "<") == 0 || strcmp(cmd[i], ">") == 0 || strcmp(cmd[i], ">>") == 0)
 			return 3;
 	}
 	return 1;
@@ -178,10 +178,13 @@ void handleType3Command(char** cmd, int count)
 
 	char* filePathInput = NULL;
 	char* filePathOutput = NULL;
+	char* filePathOutputAppend = NULL;
 
 	int flag = 0;
 	int count2 = 0;
 
+	int orderOut = 0;
+	int orderOutAppend = 0;
 	int i;
 	for (i = 0; i < count; i++)
 	{
@@ -195,6 +198,14 @@ void handleType3Command(char** cmd, int count)
 		{
 			filePathOutput = cmd[i+1];
 			flag = 1;
+			orderOut = i;
+		}
+
+		if(strcmp(cmd[i], ">>") == 0)
+		{
+			filePathOutputAppend = cmd[i+1];
+			flag = 1;
+			orderOutAppend = i;
 		}
 
 		if(flag == 0)
@@ -225,7 +236,8 @@ void handleType3Command(char** cmd, int count)
 		{
 			int fileDesInput = 0;
 			int fileDesOutput = 1;
-			if(filePathInput != NULL || filePathOutput != NULL)
+			int fileDesOutputAppend = 1;
+			if(filePathInput != NULL || filePathOutput != NULL || filePathOutputAppend != NULL)
 			{
 				if(filePathInput != NULL)
 				{
@@ -241,24 +253,73 @@ void handleType3Command(char** cmd, int count)
 						close(fileDesInput);
 					}
 				}
-			
-
-				if(filePathOutput != NULL)
+				
+				if(filePathOutput != NULL && filePathOutputAppend != NULL)
 				{
-					fileDesOutput = open(filePathOutput, O_WRONLY | O_TRUNC | O_CREAT,  S_IWUSR | S_IWGRP |S_IWOTH | S_IRUSR | S_IRGRP | S_IROTH);
-					if(fileDesOutput < 0)
+					if(orderOut > orderOutAppend)
 					{
-						printf("Error: Cannot open file.\n");
-						exit(EXIT_FAILURE);
+						fileDesOutput = open(filePathOutput, O_WRONLY | O_TRUNC | O_CREAT,  S_IWUSR | S_IWGRP |S_IWOTH | S_IRUSR | S_IRGRP | S_IROTH);
+						if(fileDesOutput < 0)
+						{
+							printf("Error: Cannot open file.\n");
+							exit(EXIT_FAILURE);
+						}
+						else
+						{
+							dup2(fileDesOutput, STDOUT);
+							close(fileDesInput);
+						}
 					}
 					else
 					{
-						dup2(fileDesOutput, STDOUT);
-						close(fileDesInput);
+						fileDesOutputAppend = open(filePathOutputAppend, O_WRONLY | O_APPEND | O_CREAT,  S_IWUSR | S_IWGRP |S_IWOTH | S_IRUSR | S_IRGRP | S_IROTH);
+						if(fileDesOutputAppend < 0)
+						{
+							printf("Error: Cannot open file.\n");
+							exit(EXIT_FAILURE);
+						}
+						else
+						{
+							dup2(fileDesOutputAppend, STDOUT);
+							close(fileDesInput);
+						}
+					}
+				}
+				else
+				{
+					if(filePathOutput != NULL)
+					{
+						fileDesOutput = open(filePathOutput, O_WRONLY | O_TRUNC | O_CREAT,  S_IWUSR | S_IWGRP |S_IWOTH | S_IRUSR | S_IRGRP | S_IROTH);
+						if(fileDesOutput < 0)
+						{
+							printf("Error: Cannot open file.\n");
+							exit(EXIT_FAILURE);
+						}
+						else
+						{
+							dup2(fileDesOutput, STDOUT);
+							close(fileDesInput);
+						}
+					}
+
+					if(filePathOutputAppend != NULL)
+					{
+						fileDesOutputAppend = open(filePathOutputAppend, O_WRONLY | O_APPEND | O_CREAT,  S_IWUSR | S_IWGRP |S_IWOTH | S_IRUSR | S_IRGRP | S_IROTH);
+						if(fileDesOutputAppend < 0)
+						{
+							printf("Error: Cannot open file.\n");
+							exit(EXIT_FAILURE);
+						}
+						else
+						{
+							dup2(fileDesOutputAppend, STDOUT);
+							close(fileDesInput);
+						}
 					}
 				}
 				execvp(newCmd[0], newCmd);
 				exit(EXIT_SUCCESS);
+
 			}
 			else
 			{
@@ -292,8 +353,6 @@ void addCmdToHistory(char*** cmdHistory, int* count, char* newCmd)
   (*cmdHistory)[*count - 1] = strdup(newCmd);
 }
 
-
-
 // Hien thi cac lenh da dung
 void showHistory(char** cmdHistory, int count)
 {
@@ -325,31 +384,6 @@ char* getCmdAt(char** cmdHistory, int count, int pos)
 	return cmdHistory[pos - 1];
 }
 
-
-// Kiem tra lenh co chua "!" khong
-int isCmdExecuteCmdInHistory(char* cmd)
-{
-	int i;
-	int len;
-	len = strlen(cmd);
-	for(i = 0; i < len; i++)
-	{
-		if(cmd[i] == '!')
-			return 1;
-	} 
-	return 0;
-}
-
-
-
-// Kiem tra lenh co rong khong
-int isEmptyCommand(char* cmd)
-{
-	if(strcmp(cmd, "\n") == 0)
-		return 1;
-
-	return 0;
-}
 
 // Return 1: 2 chuoi bang nhau
 // Return 0: 2 chuoi khong bang 
@@ -472,24 +506,17 @@ void main()
 	{
 		char* command;
 		size_t size = 0;
-		printf("> ");
+		printf("osh> ");
 		fflush(stdin);
 		getline(&command, &size, stdin);
 
 		delSpace(command);
 
 		// Neu lenh rong
-		if(strcmp(command, "\n") == 0)
+		if(strcmp(command, "") == 0)
 			continue;
 
-		// Neu lenh khong phai !!, them vao history
-		if(isCmdExecuteCmdInHistory(command) == 0)
-		{
-			char* lastCmd = getTheLastCmd(commandHistory, countHistory);
-			if(isStringEqual(command, lastCmd) == 0)
-				addCmdToHistory(&commandHistory, &countHistory, command);		
-		}
-
+		
 		char **cmd;
 		int count;
 		cmd = splitCommand(command, &count);
@@ -514,47 +541,53 @@ void main()
 
 		}	
 
-    // Neu lenh la ! + 'number'
-    if(count == 1 && cmd[0][0] == '!' && strlen(cmd[0]) > 1)
-    {
-      int number = 0, i;
-      int flag = 0;
+		// Neu lenh la ! + 'number'
+		if(count == 1 && cmd[0][0] == '!' && strlen(cmd[0]) > 1)
+		{
+		int number = 0, i;
+		int flag = 0;
 
-      // Lay ra 'number'
-      for(i = 1; i < strlen(cmd[0]); i++)
-      {
-        int digit = cmd[0][i] - '0';
-        if(digit < 0 || digit > 9)
-        {
-          flag = 1;
-          break;
-        }
-        else
-        {
-          number = number * 10 + digit;
-        }
-      }
+		// Lay ra 'number'
+		for(i = 1; i < strlen(cmd[0]); i++)
+		{
+			int digit = cmd[0][i] - '0';
+			if(digit < 0 || digit > 9)
+			{
+			flag = 1;
+			break;
+			}
+			else
+			{
+			number = number * 10 + digit;
+			}
+		}
 
-      // Neu 'number' khong phai so
-      if(flag == 1)
-        continue;
+		// Neu 'number' khong phai so
+		if(flag == 1)
+			continue;
 
-      // Lay ra lenh o vi tri 'number'
-      char* selectedCmd = getCmdAt(commandHistory, countHistory, number);
+		// Lay ra lenh o vi tri 'number'
+		char* selectedCmd = getCmdAt(commandHistory, countHistory, number);
 
-      // Neu 'number' > history stack
-      if(selectedCmd == NULL)
-        continue;
+		// Neu 'number' > history stack
+		if(selectedCmd == NULL)
+			continue;
 
-      command = strdup(selectedCmd);
+		command = strdup(selectedCmd);
 
-			puts(command);
-			cmd = splitCommand(command, &count);
-    }
+				puts(command);
+				cmd = splitCommand(command, &count);
+		}
+
+		//Them lenh vao history
+		char* lastCmd = getTheLastCmd(commandHistory, countHistory);
+		if(isStringEqual(command, lastCmd) == 0)
+			addCmdToHistory(&commandHistory, &countHistory, command);	
+
 
 		if(strcmp(cmd[0], "history") == 0 && count == 1)
 		{
-			showHistory(commandHistory, countHistory);
+			showHistory(commandHistory, countHistory);	
 			continue;
 		}	
 
@@ -657,6 +690,8 @@ void main()
 		else if (getTypeOfCommand(cmd, count) == 4)
 				handleType4Command(cmd, count);
 
+
+		
 		if(command != NULL)
 			free(command);
 		int i;
