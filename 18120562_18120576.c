@@ -289,12 +289,7 @@ void addCmdToHistory(char*** cmdHistory, int* count, char* newCmd)
 
 	*count = *count + 1;
 
-	(*cmdHistory)[*count - 1] = malloc(sizeof(char) * (strlen(newCmd) + 1));
-
-	int i;
-	for(i = 0; i < strlen(newCmd); i++)
-		(*cmdHistory)[*count - 1][i] = newCmd[i];
-	(*cmdHistory)[*count - 1][i] = '\0';
+  (*cmdHistory)[*count - 1] = strdup(newCmd);
 }
 
 
@@ -321,20 +316,33 @@ char* getTheLastCmd(char** cmdHistory, int count)
 	return cmdHistory[count - 1];
 }
 
-// Kiem tra lenh co phai la !! khong
-int isCmdExecuteLastCmd(char* cmd)
+// Lay ra lenh o vi tri pos
+char* getCmdAt(char** cmdHistory, int count, int pos)
+{
+	if(count < pos)
+		return NULL;
+
+	return cmdHistory[pos - 1];
+}
+
+
+// Kiem tra lenh co chua "!" khong
+int isCmdExecuteCmdInHistory(char* cmd)
 {
 	int i;
 	int len;
 	len = strlen(cmd);
-	for(i = 0; i < len - 1; i++)
+	for(i = 0; i < len; i++)
 	{
-		if(cmd[i] == '!' && cmd[i + 1] == '!')
+		if(cmd[i] == '!')
 			return 1;
 	} 
 	return 0;
 }
 
+
+
+// Kiem tra lenh co rong khong
 int isEmptyCommand(char* cmd)
 {
 	if(strcmp(cmd, "\n") == 0)
@@ -343,6 +351,8 @@ int isEmptyCommand(char* cmd)
 	return 0;
 }
 
+// Return 1: 2 chuoi bang nhau
+// Return 0: 2 chuoi khong bang 
 int isStringEqual(char* str1, char* str2)
 {
 	if(str1 == NULL || str2 == NULL)
@@ -363,29 +373,26 @@ int isStringEqual(char* str1, char* str2)
 }
 
 
-
+// Tach lenh dung pipe
 void splitCommandUsePipe(char** cmd, int count, char*** firstCmd, char*** secondCmd)
 {
 	int i, temp = -1;
 	for(i = 0; i < count; i++)
 		if(strcmp(cmd[i], "|") == 0)
 			temp = i;
+
 	if(temp < 0)
 		return;
 
+  // Lay ra lenh thu nhat
 	*firstCmd = (char**) malloc(sizeof(char*) * temp);
 	for(i = 0; i < temp; i++)
-	{
-		(*firstCmd)[i] = malloc(sizeof(char) * strlen(cmd[i]));
-		strcpy((*firstCmd)[i], cmd[i]);
-	}
+    (*firstCmd)[i] = strdup(cmd[i]);
 
+  // Lay ra lenh thu hai
 	*secondCmd = (char**) malloc(sizeof(char*) * (count - temp - 1));
 	for(i = temp + 1; i < count; i++)
-	{
-		(*secondCmd)[i - temp - 1] = malloc(sizeof(char) * strlen(cmd[i]));
-		strcpy((*secondCmd)[i - temp - 1], cmd[i]);
-	} 
+    (*secondCmd)[i - temp - 1] = strdup(cmd[i]);
 }
 
 
@@ -409,7 +416,7 @@ void handleType4Command(char** cmd, int count)
 			printf( "Error: Cannot create process.\n" );
 			break;
 
-		case 0:		// Thuc thi lenh dau tien va ghi len pip
+		case 0:		// Thuc thi lenh dau tien va ghi len pipe
 			dup2(fd[WRITE_END], STDOUT);	
 			close(fd[READ_END]);	    	
     		close(fd[WRITE_END]);			
@@ -476,7 +483,7 @@ void main()
 			continue;
 
 		// Neu lenh khong phai !!, them vao history
-		if(isCmdExecuteLastCmd(command) == 0)
+		if(isCmdExecuteCmdInHistory(command) == 0)
 		{
 			char* lastCmd = getTheLastCmd(commandHistory, countHistory);
 			if(isStringEqual(command, lastCmd) == 0)
@@ -490,24 +497,60 @@ void main()
 		// Neu lenh la !!
 		if(strcmp(cmd[0], "!!") == 0 && count == 1)
 		{
+      // Lay ra lenh o vi tri cuoi cung
 			char* lastCmd = getTheLastCmd(commandHistory, countHistory);
-			// Neu history rong
+		
+    	// Neu history rong
 			if(lastCmd == NULL)
 			{
 				printf("No command in history.\n");
 				continue;
 			}
 
-			command = malloc(sizeof(char) * (strlen(lastCmd) + 1));
-			int i;
-			for(i = 0; i < strlen(lastCmd); i++)
-				command[i] = lastCmd[i];
-			command[i] = '\0';	
+			command = strdup(lastCmd);	
 
 			puts(command);
 			cmd = splitCommand(command, &count);
 
 		}	
+
+    // Neu lenh la ! + 'number'
+    if(count == 1 && cmd[0][0] == '!' && strlen(cmd[0]) > 1)
+    {
+      int number = 0, i;
+      int flag = 0;
+
+      // Lay ra 'number'
+      for(i = 1; i < strlen(cmd[0]); i++)
+      {
+        int digit = cmd[0][i] - '0';
+        if(digit < 0 || digit > 9)
+        {
+          flag = 1;
+          break;
+        }
+        else
+        {
+          number = number * 10 + digit;
+        }
+      }
+
+      // Neu 'number' khong phai so
+      if(flag == 1)
+        continue;
+
+      // Lay ra lenh o vi tri 'number'
+      char* selectedCmd = getCmdAt(commandHistory, countHistory, number);
+
+      // Neu 'number' > history stack
+      if(selectedCmd == NULL)
+        continue;
+
+      command = strdup(selectedCmd);
+
+			puts(command);
+			cmd = splitCommand(command, &count);
+    }
 
 		if(strcmp(cmd[0], "history") == 0 && count == 1)
 		{
