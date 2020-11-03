@@ -394,55 +394,55 @@ void splitCommandUsePipe(char** cmd, int count, char*** firstCmd, char*** second
 void handleType4Command(char** cmd, int count)
 {
 	pid_t pid, cpid;
-	int status;
-	int corpse;
+	int status, childStatus;
 	int fd[2];
-	int childStatus;
 	char** firstCmd;
 	char** secondCmd;
 	splitCommandUsePipe(cmd, count, &firstCmd, &secondCmd);	
 
-	pid = fork();
+	
+	pipe(fd);		// Tao pipe
+	pid = fork();	// Tao process
 	switch(pid)
 	{
 		case -1:
 			printf( "Error: Cannot create process.\n" );
 			break;
 
-		case 0:
-			pipe(fd);
-    		cpid = fork();
+		case 0:		// Thuc thi lenh dau tien va ghi len pip
+			dup2(fd[WRITE_END], STDOUT);	
+			close(fd[READ_END]);	    	
+    		close(fd[WRITE_END]);			
+
+			execvp(firstCmd[0], firstCmd);
+			_exit(EXIT_SUCCESS);
+			break;
+
+		default:
+			cpid = fork();	// Tao process
 			switch(cpid)
 			{
 				case -1:
 					printf( "Error: Cannot create process.\n" );
 					break;
+	
+				case 0:		// Doc ket qua cua lenh dau tien tu pipe va thuc thi lenh thu hai
+					dup2(fd[READ_END], STDIN);	
+					close(fd[READ_END]);	    	
+					close(fd[WRITE_END]);			
 
-				case 0:					
-					dup2(fd[READ_END], STDIN);
-		    		close(fd[READ_END]);
-					close (fd[WRITE_END]);
-
-		    		execvp(secondCmd[0], secondCmd);
+					execvp(secondCmd[0], secondCmd);
 					_exit(EXIT_SUCCESS);
 					break;
 
-				default:					
-					dup2(fd[WRITE_END], STDOUT);	
+				default:	// Doi cac process con ket thuc
 					close(fd[READ_END]);	    	
-		    		close(fd[WRITE_END]);			
-
-					execvp(firstCmd[0], firstCmd);
-					_exit(EXIT_SUCCESS);
+					close(fd[WRITE_END]);
+					wait(&status);
+					wait(&childStatus);
 					break;
 			}
-			break;
-
-		default:
-			wait(NULL);
-			wait(NULL);
-			usleep(50000);
-			break;		
+			break;	
 	}
 }
 
