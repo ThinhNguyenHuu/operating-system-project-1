@@ -150,7 +150,7 @@ int getTypeOfCommand (char** cmd, int count)
 }
 
 //Xu ly lenh thuong.
-void handleType1Command(char** cmd, int count)
+void handleType1Command(char** cmd, int count, int concurrent)
 {
 	pid_t new_pid;
 	int child_status;
@@ -165,13 +165,14 @@ void handleType1Command(char** cmd, int count)
 			exit(EXIT_SUCCESS);			
 		 	break;
 		default: 
-			wait( &child_status ); //Tien trinh cha doi tien trinh con ket thuc.
+			if(concurrent == 0 || strcmp(cmd[0], "less") == 0)
+				waitpid(new_pid, &child_status, 0 ); //Tien trinh cha doi tien trinh con ket thuc.
 			break;
 	}
 }
 
 //Xu ly lenh < hoac >
-void handleType3Command(char** cmd, int count)
+void handleType3Command(char** cmd, int count, int concurrent)
 {
 	pid_t new_pid;
 	int child_status;
@@ -330,7 +331,8 @@ void handleType3Command(char** cmd, int count)
 
 		 	break;
 		default: 
-			wait( &child_status ); //Tien trinh cha doi tien trinh con ket thuc.
+			if(concurrent == 0 || strcmp(newCmd[0], "less") == 0)
+				waitpid(new_pid, &child_status, 0 ); //Tien trinh cha doi tien trinh con ket thuc.
 			break;
 	}
 	for(i = 0; i < count2; i++)
@@ -352,6 +354,8 @@ void addCmdToHistory(char*** cmdHistory, int* count, char* newCmd)
 
   (*cmdHistory)[*count - 1] = strdup(newCmd);
 }
+
+
 
 // Hien thi cac lenh da dung
 void showHistory(char** cmdHistory, int count)
@@ -432,7 +436,7 @@ void splitCommandUsePipe(char** cmd, int count, char*** firstCmd, char*** second
 
 
 // Xu ly lenh dung pipe
-void handleType4Command(char** cmd, int count)
+void handleType4Command(char** cmd, int count, int concurrent)
 {
 	pid_t pid, cpid;
 	int status, childStatus;
@@ -479,8 +483,11 @@ void handleType4Command(char** cmd, int count)
 				default:	// Doi cac process con ket thuc
 					close(fd[READ_END]);	    	
 					close(fd[WRITE_END]);
-					wait(&status);
-					wait(&childStatus);
+					if(concurrent == 0 || strcmp(secondCmd[0], "less") == 0)
+					{
+						waitpid(pid, &status, 0);
+						waitpid(cpid, &childStatus, 0);
+					}
 					break;
 			}
 			break;	
@@ -506,12 +513,23 @@ void main()
 	{
 		char* command;
 		size_t size = 0;
+		int concurrent = 0;
 		printf("osh> ");
 		fflush(stdin);
 		getline(&command, &size, stdin);
 
 		delSpace(command);
 
+
+		if(strlen(command) >= 1 && command[strlen(command) - 1] == '&')
+		{
+			while(command[strlen(command) - 1] == ' ' || command[strlen(command) -1] == '\n' || command[strlen(command) -1] == '&')
+			{
+				command[strlen(command) - 1] = '\0';
+			}
+			concurrent = 1;
+		}
+	
 		// Neu lenh rong
 		if(strcmp(command, "") == 0)
 			continue;
@@ -541,59 +559,77 @@ void main()
 
 		}	
 
-		// Neu lenh la ! + 'number'
-		if(count == 1 && cmd[0][0] == '!' && strlen(cmd[0]) > 1)
-		{
-		int number = 0, i;
-		int flag = 0;
+	    // Neu lenh la ! + 'number'
+	    if(count == 1 && cmd[0][0] == '!' && strlen(cmd[0]) > 1)
+	    {
+	        int number = 0, i;
+	        int flag = 0;
 
-		// Lay ra 'number'
-		for(i = 1; i < strlen(cmd[0]); i++)
-		{
-			int digit = cmd[0][i] - '0';
-			if(digit < 0 || digit > 9)
-			{
-			flag = 1;
-			break;
-			}
-			else
-			{
-			number = number * 10 + digit;
-			}
-		}
+	        // Lay ra 'number'
+	        for(i = 1; i < strlen(cmd[0]); i++)
+	        {
+		        int digit = cmd[0][i] - '0';
+		        if(digit < 0 || digit > 9)
+		        {
+		            flag = 1;
+		            break;
+		        }
+		        else
+		        {
+		            number = number * 10 + digit;
+		        }
+	        }
 
-		// Neu 'number' khong phai so
-		if(flag == 1)
-			continue;
+	        // Neu 'number' khong phai so
+	        if(flag == 1)
+		        continue;
 
-		// Lay ra lenh o vi tri 'number'
-		char* selectedCmd = getCmdAt(commandHistory, countHistory, number);
+	        // Lay ra lenh o vi tri 'number'
+	        char* selectedCmd = getCmdAt(commandHistory, countHistory, number);
 
-		// Neu 'number' > history stack
-		if(selectedCmd == NULL)
-			continue;
+	        // Neu 'number' > history stack
+	        if(selectedCmd == NULL)
+		        continue;
 
-		command = strdup(selectedCmd);
+	        command = strdup(selectedCmd);
 
-				puts(command);
-				cmd = splitCommand(command, &count);
-		}
+		    puts(command);
+		    cmd = splitCommand(command, &count);
+	    }
 
 		//Them lenh vao history
 		char* lastCmd = getTheLastCmd(commandHistory, countHistory);
 		if(isStringEqual(command, lastCmd) == 0)
 			addCmdToHistory(&commandHistory, &countHistory, command);	
 
-
+		
 		if(strcmp(cmd[0], "history") == 0 && count == 1)
 		{
-			showHistory(commandHistory, countHistory);	
+			pid_t new_pid;
+			int child_status;
+			new_pid = fork(); 
+			switch (new_pid)
+			{
+				case -1: 
+					printf( "Error: Cannot create process.\n" );
+					break;
+				case 0: 
+					showHistory(commandHistory, countHistory);
+					exit(EXIT_SUCCESS);			
+				 	break;
+				default: 
+					if(concurrent == 0)
+						waitpid(new_pid, &child_status, 0 ); //Tien trinh cha doi tien trinh con ket thuc.
+					break;
+			}
+				
 			continue;
 		}	
 
 
 		if(strcmp(cmd[0], "cd") == 0)
 		{
+			
 			tempPath2 = (char*)malloc(strlen(tempPath) + 1);
 
 			int i;
@@ -684,11 +720,11 @@ void main()
 
 
 		if(getTypeOfCommand(cmd, count) == 1)
-			handleType1Command(cmd, count);
+			handleType1Command(cmd, count, concurrent);
 		else if (getTypeOfCommand(cmd, count) == 3)
-				handleType3Command(cmd, count);
+				handleType3Command(cmd, count, concurrent);
 		else if (getTypeOfCommand(cmd, count) == 4)
-				handleType4Command(cmd, count);
+				handleType4Command(cmd, count, concurrent);
 
 
 		
@@ -703,7 +739,6 @@ void main()
 
 		if(cmd != NULL)
 			free(cmd);
-
 	}
 
 }
